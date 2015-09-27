@@ -2,10 +2,11 @@
 //! \brief 实现iOS绘图视图类 GiPaintView
 // Copyright (c) 2012-2015, https://github.com/rhcad/vgios, BSD License
 
-#import "GiViewImpl.h"
+#import "GiViewAdapter.h"
 #import "GiImageCache.h"
 #import "GiMagnifierView.h"
 #include <map>
+
 
 #pragma mark - GiDynDrawView
 
@@ -191,10 +192,12 @@
 
 @end
 
-static GiPaintView* _activePaintView = nil;
-static std::map<int, dispatch_block_t> _extActions;
 
-GiColor CGColorToGiColor(CGColorRef color);
+
+
+
+
+static GiPaintView* _activePaintView = nil;
 
 @implementation GiPaintView
 
@@ -241,7 +244,6 @@ GiColor CGColorToGiColor(CGColorRef color);
     self.multipleTouchEnabled = YES;                // 检测多个触点
     self.contentMode = UIViewContentModeRedraw;     // 避免转屏变形
     
-    GiCoreView::setScreenDpi(giGetScreenDpi());
     [self setupGestureRecognizers];
     _adapter->coreView()->setPenWidthRange(_adapter, 0.5f, -1);
     
@@ -302,10 +304,10 @@ GiColor CGColorToGiColor(CGColorRef color);
     [super setFrame:frame];
     if (_adapter) {
         _adapter->coreView()->onSize(_adapter, frame.size.width, frame.size.height);
-        if ( ! (_adapter->getFlags() & GIViewFlagsZoomExtent)
-            || !_adapter->coreView()->zoomToExtent()) {
-            _adapter->regenAll(false);
-        }
+//        if ( ! (_adapter->getFlags() & GIViewFlagsZoomExtent)
+//            || !_adapter->coreView()->zoomToExtent()) {
+//            _adapter->regenAll(false);
+//        }
         
         for (size_t n = _adapter->delegates.size(), i = 0; i < n; i++) {
             if ([_adapter->delegates[i] respondsToSelector:@selector(onResizeFrame:)]) {
@@ -418,6 +420,7 @@ GiColor CGColorToGiColor(CGColorRef color);
     [self coreView]->releaseDoc(doc);
 }
 
+
 - (UIImage *)snapshotCG {
     float scale = [UIScreen mainScreen].scale;
     CGSize size = self.bounds.size;
@@ -450,12 +453,15 @@ GiColor CGColorToGiColor(CGColorRef color);
     return image;
 }
 
-- (UIImage *)snapshot {
-    if (![NSThread isMainThread]) {
+- (UIImage *)snapshot
+{
+    if (![NSThread isMainThread])
+    {
         return [self snapshotCG];
     }
     
     [self hideContextActions];
+    
     UIGraphicsBeginImageContextWithOptions(self.bounds.size, self.opaque, 0);
     
     if (self.window) {
@@ -463,22 +469,12 @@ GiColor CGColorToGiColor(CGColorRef color);
     } else {
         _adapter->renderInContext(UIGraphicsGetCurrentContext());
     }
-    
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
     
     return image;
 }
 
-- (BOOL)exportPNG:(NSString *)filename {
-    UIImage *image = [self snapshot];
-    BOOL ret = [UIImagePNGRepresentation(image) writeToFile:filename atomically:NO];
-    if (ret) {
-        NSLog(@"exportPNG: %@, %d, %.0fx%.0f@%.0fx",
-              filename, ret, image.size.width, image.size.height, image.scale);
-    }
-    return ret;
-}
 
 - (void)setBackgroundColor:(UIColor *)color {
     [super setBackgroundColor:color];
@@ -525,34 +521,13 @@ GiColor CGColorToGiColor(CGColorRef color);
     return arr;
 }
 
-- (void)addDelegate:(id<GiPaintViewDelegate>)d {
-    if (d) {
-        [self removeDelegate:d];
-        _adapter->delegates.push_back(d);
-        _adapter->respondsTo.didCommandChanged |= [d respondsToSelector:@selector(onCommandChanged:)];
-        _adapter->respondsTo.didSelectionChanged |= [d respondsToSelector:@selector(onSelectionChanged:)];
-        _adapter->respondsTo.didContentChanged |= [d respondsToSelector:@selector(onContentChanged:)];
-        _adapter->respondsTo.didDynamicChanged |= [d respondsToSelector:@selector(onDynamicChanged:)];
-        _adapter->respondsTo.didZoomChanged |= [d respondsToSelector:@selector(onZoomChanged:)];
-        _adapter->respondsTo.didDynDrawEnded |= [d respondsToSelector:@selector(onDynDrawEnded:)];
-        _adapter->respondsTo.didShapesRecorded |= [d respondsToSelector:@selector(onShapesRecorded:)];
-        _adapter->respondsTo.didShapeWillDelete |= [d respondsToSelector:@selector(onShapeWillDelete:)];
-        _adapter->respondsTo.didShapeDeleted |= [d respondsToSelector:@selector(onShapeDeleted:)];
-        _adapter->respondsTo.didShapeDblClick |= [d respondsToSelector:@selector(onShapeDblClick:)];
-        _adapter->respondsTo.didShapeClicked |= [d respondsToSelector:@selector(onShapeClicked:)];
-        _adapter->respondsTo.didGestureShouldBegin |= [d respondsToSelector:@selector(onGestureShouldBegin:)];
-        _adapter->respondsTo.didGestureBegan |= [d respondsToSelector:@selector(onGestureBegan:)];
-        _adapter->respondsTo.didGestureEnded |= [d respondsToSelector:@selector(onGestureEnded:)];
-    }
+
+- (void)addDelegate:(id<GiPaintViewDelegate>)d{
+    _adapter->addDelegate(d);
 }
 
-- (void)removeDelegate:(id<GiPaintViewDelegate>)d {
-    for (size_t i = 0; i < _adapter->delegates.size(); i++) {
-        if (_adapter->delegates[i] == d) {
-            _adapter->delegates.erase(_adapter->delegates.begin() + i);
-            break;
-        }
-    }
+- (void)removeDelegate:(id<GiPaintViewDelegate>)d{
+    _adapter->removeDelegate(d);
 }
 
 - (BOOL)contextActionEnabled {
@@ -567,23 +542,26 @@ GiColor CGColorToGiColor(CGColorRef color);
     _adapter->hideContextActions();
 }
 
+static std::map<int, dispatch_block_t> _extActions;
++ (void)addContextAction:(int)action block:(dispatch_block_t)block {
+    _extActions[action] = block;
+}
+
 - (IBAction)onContextAction:(id)sender {
     UIView *btn = (UIView *)sender;
     int action = btn ? (int)btn.tag : 0;
     
     [NSObject cancelPreviousPerformRequestsWithTarget:self
-                                             selector:@selector(hideContextActions) object:nil];
+                                             selector:@selector(hideContextActions)
+                                               object:nil];
     _adapter->hideContextActions();
+    
     @synchronized(_adapter->locker()) {
         if (![self coreView]->doContextAction(action)
             && _extActions.find(action) != _extActions.end()) {
             _extActions[action]();
         }
     }
-}
-
-+ (void)addContextAction:(int)action block:(dispatch_block_t)block {
-    _extActions[action] = block;
 }
 
 - (void)removeFromSuperview {
@@ -623,6 +601,98 @@ GiColor CGColorToGiColor(CGColorRef color);
 
 - (void)stopRecord:(BOOL)forUndo {
     _adapter->stopRecord(forUndo);
+}
+
+- (void)initialZoomPan
+{
+    float xorg, yorg;
+    float scale = _adapter->coreView()->getOrgOffsetAndZoom(_adapter, xorg, yorg);
+
+    float step = 3;
+    int nStepCount = MAX(fabs(xorg/step) , fabsf(yorg/step)) + 1;
+    float xoffset = xorg / nStepCount;
+    float yoffset = -yorg / nStepCount;
+    float scaleStep = ( 1.f - scale) / nStepCount;
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        
+        for ( int i = 1; i <= nStepCount; i++ )
+        {
+            _adapter->coreView()->zoomPan(xoffset, yoffset);
+            _adapter->coreView()->zoomScale(scale + i * scaleStep);
+            usleep(5000);
+        }
+    });
+    
+    //_adapter->coreView()->zoomToInitial();
+}
+
+- (void)extentZoomPan
+{
+    mgvector<float> wndbox(4);
+    _adapter->coreView()->getViewModelBox(wndbox);
+    float x1 = (wndbox.get(0) + wndbox.get(2)) / 2;
+    float y1 = (wndbox.get(1) + wndbox.get(3)) / 2;
+    float w1 = fabsf(wndbox.get(0) - wndbox.get(2));
+    float h1 = fabsf(wndbox.get(1) - wndbox.get(3));
+    
+    mgvector<float> extbox(4);
+    _adapter->coreView()->getModelBox(extbox);
+    float x0 = (extbox.get(0) + extbox.get(2)) / 2;
+    float y0 = (extbox.get(1) + extbox.get(3)) / 2;
+    float w0 = fabsf(extbox.get(0) - extbox.get(2));
+    float h0 = fabsf(extbox.get(1) - extbox.get(3));
+    
+    float step = 1;
+    int nStepCount = MAX(fabs(x0-x1) , fabsf(y0-y1))/step + 1;
+    float xstep = (x0 - x1) / nStepCount;
+    float ystep = (y0 - y1) / nStepCount;
+    float wstep = (w0 - w1) / nStepCount;
+    float hstep = (h0 - h1) / nStepCount;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        
+        for ( int i = 1; i <= nStepCount; i++ )
+        {
+            _adapter->coreView()->zoomToModelCenter(x1 + i * xstep, y1 + i * ystep, w1 + i * wstep, h1 + i * hstep, 10);
+            usleep(5000);
+        }
+    });
+    
+    //_adapter->coreView()->zoomToExtent();
+}
+
+- (void)setViewScaleRangeFrom:(CGFloat)minScale To:(CGFloat)maxScale
+{
+    _adapter->coreView()->setViewScaleRange(_adapter, minScale, maxScale);
+}
+
+- (void)setBackgroundImage:(NSString *)bgImage width:(CGFloat) width height:(CGFloat) height scale:(CGFloat)scale
+{
+    if ( scale == 0.f )
+    {
+        scale = [[UIScreen mainScreen] scale];
+    }
+    width /= scale;
+    height /= scale;
+    
+    const char *bg = [bgImage UTF8String];
+    _adapter->coreView()->setBackgroundImage(_adapter, bg, width, height);
+}
+
+
+- (void) setShapeInfo:(NSString *)key withValue:(NSString *)value
+{
+    _adapter->coreView()->setShapeInfo([key UTF8String], [value UTF8String]);
+}
+
+- (NSString *) getShapeInfo:(NSString *)key
+{
+    const char *psz = _adapter->coreView()->getShapeInfo([key UTF8String]);
+    if ( psz != nil )
+        return [[NSString alloc] initWithUTF8String:psz];
+    else
+        return @"";
 }
 
 @end
@@ -731,15 +801,15 @@ GiColor CGColorToGiColor(CGColorRef color);
         [self dispatchTapPending];                              // 分发挂起的单击手势
     }
     
-    BOOL allow = (!_buttonHandled ||
-                  (recognizer != _tapRecognizer && recognizer != _pressRecognizer));
+    BOOL allow = (!_buttonHandled || (recognizer != _tapRecognizer && recognizer != _pressRecognizer));
     
     _buttonHandled = NO;
     _ignorePt = CGPointMake(-1, -1);
     
     // 将状态为 UIGestureRecognizerStatePossible 的手势传递到内核，看是否允许此手势
     if (!allow) {}
-    else if (recognizer == _pinchRecognizer || recognizer == _rotationRecognizer
+    else if (recognizer == _pinchRecognizer
+             || recognizer == _rotationRecognizer
              || recognizer == _panRecognizer) {
         allow = [self moveHandler:recognizer];
     }
@@ -755,7 +825,7 @@ GiColor CGColorToGiColor(CGColorRef color);
     
     return allow;
 }
-
+ 
 - (BOOL)onGestureShouldBegin_:(UIGestureRecognizer*)sender {
     size_t n = _adapter->respondsTo.didGestureShouldBegin ? _adapter->delegates.size() : 0;
     
@@ -799,28 +869,33 @@ GiColor CGColorToGiColor(CGColorRef color);
     }
 }
 
-- (BOOL)gestureCheck:(UIGestureRecognizer*)sender {
+- (BOOL)gestureCheck:(UIGestureRecognizer*)sender
+{
     _gestureRecognized = (sender.state == UIGestureRecognizerStateBegan
                           || sender.state == UIGestureRecognizerStateChanged);
     
     if (sender.state == UIGestureRecognizerStatePossible
-        && _gestureEnabled && ![self onGestureShouldBegin_:sender]) {
+        && _gestureEnabled && ![self onGestureShouldBegin_:sender])
+    {
         return NO;
     }
     
     if (!self.viewToMagnify && sender.state == UIGestureRecognizerStateBegan
-        && (_adapter->getFlags() & GIViewFlagsMagnifier)) {
+        && (_adapter->getFlags() & GIViewFlagsMagnifier))
+    {
         if (_adapter->getFlags() & GIViewFlagsNoDynDrawView)
             self.viewToMagnify = self;
         else
             self.viewToMagnify = self.superview;
     }
+    
     if (sender.state == UIGestureRecognizerStateBegan
         && [sender numberOfTouches] == 1
         && self.viewToMagnify && !self.mainView
         && _adapter->canShowMagnifier())
     {
-        if (!_magnifierView) {
+        if (!_magnifierView)
+        {
             _magnifierView = [[GiMagnifierView alloc]init];
             _magnifierView.followFinger = YES;
             _magnifierView.viewToMagnify = self.viewToMagnify;
@@ -829,7 +904,8 @@ GiColor CGColorToGiColor(CGColorRef color);
         _magnifierView.touchPoint = [sender locationInView:_magnifierView.viewToMagnify];
     }
     else if (sender.state == UIGestureRecognizerStateChanged
-             && _magnifierView && _magnifierView.window) {
+             && _magnifierView && _magnifierView.window)
+    {
         _magnifierView.touchPoint = [sender locationInView:_magnifierView.viewToMagnify];
     }
     

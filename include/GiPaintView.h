@@ -3,14 +3,47 @@
 // Copyright (c) 2012-2015, https://github.com/rhcad/vgios, BSD License
 
 #import "GiPaintViewDelegate.h"
+#import "GiImageCache.h"
+#include "GiUtil.h"
 
-#ifdef __cplusplus
+#include <vector>
+#include "mgvector.h"
+
+
 class GiCoreView;
 class GiView;
 class GiViewAdapter;
-#endif
 
-@class GiImageCache;
+
+@class GiMagnifierView;
+
+//! 动态图形的绘图视图类
+@interface GiDynDrawView : UIView {
+    GiViewAdapter   *_adapter;
+}
+
+- (id)initView:(CGRect)frame :(GiViewAdapter *)adapter;
++ (void)draw:(GiViewAdapter *)adapter;
+
+@end
+
+//! 在层上显示图形的渲染类
+@interface GiLayerRender : NSObject {
+    CALayer         *_layer;
+    GiViewAdapter   *_adapter;
+    __block long    _drawing;
+    __block mgvector<long>* _docs;
+    __block long    _gs;
+    dispatch_queue_t _queue;
+}
+
+- (id)initWithAdapter:(GiViewAdapter *)adapter;
+- (void)stopRender;
+- (void)clearCachedData;
+- (void)startRender:(mgvector<long>*)docs :(long)gs;
+- (BOOL)renderInContext:(CGContextRef)ctx;
+
+@end
 
 //! iOS绘图视图类
 /*! \ingroup GROUP_IOS
@@ -41,6 +74,9 @@ class GiViewAdapter;
                              refView:(GiPaintView *)refView
                           parentView:(UIView *)parentView;
 
++ (void)addContextAction:(int)action block:(dispatch_block_t)block;
+- (IBAction)onContextAction:(id)sender;     //!< 上下文按钮的响应函数
+
 - (id)initWithFrame:(CGRect)frame flags:(int)f;
 
 + (GiPaintView *)activeView;                //!< 得到当前激活的绘图视图
@@ -49,26 +85,34 @@ class GiViewAdapter;
 
 - (id<NSLocking>)locker;                    //!< 返回显示锁定对象
 
-#ifdef __cplusplus
-- (GiView *)viewAdapter;                    //!< 得到视图适配器对象, GiViewAdapter
 - (GiCoreView *)coreView;                   //!< 得到跨平台内核视图
+- (GiView *)viewAdapter;                    //!< 得到视图适配器对象, GiViewAdapter
 - (GiViewAdapter *)viewAdapter2;            //!< 得到视图适配器对象
-#endif
+
 - (long)acquireFrontDoc;                    //!< 获取前端文档句柄
 - (void)releaseDoc:(long)doc;               //!< 释放文档句柄
 
+
+- (UIImage *)snapshotCG;
 - (UIImage *)snapshot;                      //!< 得到静态图形的快照，自动释放
-- (BOOL)exportPNG:(NSString *)filename;     //!< 保存静态图形的快照到PNG文件
+
 - (void)clearCachedData;                    //!< 释放临时数据内存
 - (void)tearDown;                           //!< 停止后台任务
 - (void)stopRecord:(BOOL)forUndo;           //!< 停止录制图形
 
 - (void)hideContextActions;                 //!< 隐藏上下文按钮
-- (IBAction)onContextAction:(id)sender;     //!< 上下文按钮的响应函数
 
 - (void)addDelegate:(id<GiPaintViewDelegate>)d;     //!< 增加绘图消息观察者
 - (void)removeDelegate:(id<GiPaintViewDelegate>)d;  //!< 去掉绘图消息观察者
-+ (void)addContextAction:(int)action block:(dispatch_block_t)block;
+
+// added on 2015-09-03
+- (void)initialZoomPan;
+- (void)extentZoomPan;
+- (void)setViewScaleRangeFrom:(CGFloat)minScale To:(CGFloat)maxScale;
+- (void)setBackgroundImage:(NSString *)bgImage width:(CGFloat) width height:(CGFloat) height scale:(CGFloat)scale;
+
+- (void) setShapeInfo:(NSString *)key withValue:(NSString *)value;
+- (NSString *) getShapeInfo:(NSString *)key;
 
 @end
 
@@ -88,4 +132,35 @@ class GiViewAdapter;
 
 @end
 
-int getTickCount();
+/*! \category GiPaintView()
+ \brief GiPaintView 的内部数据定义
+ */
+@interface GiPaintView() {
+    GiViewAdapter   *_adapter;              //!< 视图回调适配器
+    
+    UIGestureRecognizer     *_recognizers[7];
+    GiMagnifierView         *_magnifierView;            //!< 手指跟随放大镜
+    
+    std::vector<CGPoint>    _points;        //!< 手势生效前的轨迹
+    CGPoint                 _startPt;       //!< 开始位置
+    CGPoint                 _lastPt;        //!< 上次位置
+    CGPoint                 _tapPoint;      //!< 点击位置
+    int                     _tapCount;      //!< 点击次数
+    int                     _touchCount;    //!< 触点个数
+    BOOL            _gestureRecognized;     //!< 识别出手势
+    BOOL                    _buttonHandled;
+    CGPoint                 _ignorePt;
+}
+
+@end
+
+/*! \category GiPaintView(GestureInternel)
+ \brief GiPaintView 的手势响应实现部分
+ */
+@interface GiPaintView(GestureInternel)
+
+- (void)ignoreTouch:(CGPoint)pt :(UIView *)handledButton;
+- (void)redrawForDelay:(id)changed;
+- (void)onContextActionsDisplay:(NSMutableArray *)buttons;
+
+@end

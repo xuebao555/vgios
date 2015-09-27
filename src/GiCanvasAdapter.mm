@@ -6,6 +6,8 @@
 #include "GiCanvasAdapter.h"
 #import "NSString+Drawing.h"
 
+NSString *GiLocalizedString(NSString *name);
+
 static const float patDash[]      = { 4, 2, 0 };
 static const float patDot[]       = { 1, 2, 0 };
 static const float patDashDot[]   = { 10, 2, 2, 2, 0 };
@@ -261,8 +263,7 @@ bool GiCanvasAdapter::drawHandle(float x, float y, int type, float angle)
 bool GiCanvasAdapter::drawBitmap(const char* name, float xc, float yc,
                                  float w, float h, float angle)
 {
-    UIImage *image = (name && _cache ? [_cache loadImage:@(name)]
-                      : [UIImage imageNamed:@"app57.png"]);
+    UIImage *image = (name && _cache ? [_cache loadImage:@(name)] : [UIImage imageNamed:@(name)]);
     if (image) {
         CGImageRef img = [image CGImage];
         CGAffineTransform af = CGAffineTransformMake(1, 0, 0, -1, xc, yc);
@@ -275,33 +276,12 @@ bool GiCanvasAdapter::drawBitmap(const char* name, float xc, float yc,
     return !!image;
 }
 
-NSString *GiLocalizedString(NSString *name)
-{
-    if ([name length] == 0) {
-        return name;
-    }
-    
-    NSString *str = name;
-    NSString *names[] = { @"TouchVG", @"vg1", @"vg2", @"vg3", @"vg4" };
-    NSString *language = [[[NSUserDefaults standardUserDefaults]
-                           objectForKey:@"AppleLanguages"] objectAtIndex:0];
-    
-    for (int i = 0; i < 5 && [str isEqualToString:name]; i++) {
-        NSString *path = [[NSBundle mainBundle] pathForResource:names[i] ofType:@"bundle"];
-        NSBundle *bundle = [NSBundle bundleWithPath:path];
-        NSBundle *languageBundle = [NSBundle bundleWithPath:[bundle pathForResource:language ofType:@"lproj"]];
-        str = NSLocalizedStringFromTableInBundle(name, nil, languageBundle, nil);
-        str = str ? str : name;
-    }
-    
-    return [str isEqualToString:name] ? NSLocalizedString(name, nil) : str;
-}
-
 float GiCanvasAdapter::drawTextAt(const char* text, float x, float y, float h, int align, float angle)
 {
     UIGraphicsPushContext(_ctx);            // 设置为当前上下文，供UIKit显示使用
     
     NSString *str = (*text == '@') ? GiLocalizedString(@(text+1)) : @(text);
+    //NSString *str = [[NSString alloc] initWithUTF8String:text];
     
     // 实际字体大小(磅) / 目标字体行高 h = 临时字体大小(磅) h / 临时字体行高 actsize.height
     UIFont *font = [UIFont systemFontOfSize:h];                             // 以磅单位作为字体大小得到临时字体
@@ -333,6 +313,26 @@ float GiCanvasAdapter::drawTextAt(const char* text, float x, float y, float h, i
         }
     }
     UIGraphicsPopContext();
+    
+    return actsize.width;
+}
+
+
+float GiCanvasAdapter::calcTextWidth(const char* text, float h)
+{
+    NSString *str = (*text == '@') ? GiLocalizedString(@(text+1)) : @(text);
+    //NSString *str = [[NSString alloc] initWithUTF8String:text];
+    
+    UIFont *font = [UIFont systemFontOfSize:h];
+    
+    CGSize actsize = boundingRectWithSize6(str, CGSizeMake(1e4f, h),
+                                           NSStringDrawingTruncatesLastVisibleLine,
+                                           @{NSFontAttributeName:font},
+                                           nil).size;
+    font = [UIFont systemFontOfSize: h * h / actsize.height];
+    
+    NSDictionary *attrs = @{NSFontAttributeName:font};
+    actsize = sizeWithAttributes6(str, attrs);
     
     return actsize.width;
 }

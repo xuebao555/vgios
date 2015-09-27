@@ -35,4 +35,17 @@ typedef NS_ENUM(int, GIViewFlags) {     //!< 视图创建标志
                                    |GIViewFlagsZoomExtent|GIViewFlagsNoCmd)
 };
 
+typedef NS_ENUM(int, GISelDrawFlag) {
+    GISelDrawDragLine      = 1<<1,     //!< 拖动提示的参考线
+    GISelDrawDragDot       = 1<<2,     //!< 拖动的终点
+    GISelDrawGroupBorder   = 1<<3,     //!< 成组图形的外框
+    GISelDrawActionBorder  = 1<<4,     //!< 上下文按钮包络框
+    GISelDrawSelBorder     = 1<<5,     //!< 选择集包络框
+    GISelDrawBlueShape     = 1<<6,     //!< 蓝色显示选中的图形
+    GISelDrawHandle        = 1<<7,     //!< 控制点
+    
+    GISelDrawXformBox      = 1<<16,    //!< 矩形变形框
+    GISelDrawNearPt        = 1<<17,    //!< 最近点
+};
+
 #endif // __TOUCHVG_VIEWENUMS_H

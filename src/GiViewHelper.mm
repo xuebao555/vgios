@@ -3,7 +3,7 @@
 // Copyright (c) 2012-2015, https://github.com/rhcad/vgios, BSD License
 
 #import "GiViewHelper.h"
-#import "GiViewImpl.h"
+#import "GiViewAdapter.h"
 #import "GiImageCache.h"
 #include "mgview.h"
 
@@ -29,6 +29,7 @@ GiColor CGColorToGiColor(CGColorRef color) {
                    (int)lroundf(rgba[2] * 255.f),
                    (int)lroundf(CGColorGetAlpha(color) * 255.f));
 }
+
 
 //! 遍历图像块用的回调类
 struct GiImageFinderD : public MgFindImageCallback {
@@ -526,7 +527,10 @@ static GiViewHelper *_sharedInstance = nil;
     long doc = [self acquireFrontDoc];
     
     vgfile = [GiViewHelper addExtension:vgfile :@".vg"];
-    if ([_view coreView]->getShapeCount(doc) > 0) {
+    // commented out to allow create empty file on 2015-09-03
+    //if ([_view coreView]->getShapeCount(doc) > 0)
+    if ( true )
+    {
         if (![fm fileExistsAtPath:vgfile]) {
             [fm createFileAtPath:vgfile contents:[NSData data] attributes:nil];
         }
@@ -564,7 +568,8 @@ static GiViewHelper *_sharedInstance = nil;
     return [_view snapshot];
 }
 
-- (UIImage *)extentSnapshot:(CGFloat)space {
+- (UIImage *)extentSnapshot:(CGFloat)space
+{
     [_view hideContextActions];
     
     CGRect extent = [self displayExtent];
@@ -585,9 +590,19 @@ static GiViewHelper *_sharedInstance = nil;
     return image;
 }
 
-- (UIImage *)snapshotWithShapes:(NSArray *)ids size:(CGSize)size {
+- (UIImage *)snapshotWithShapes:(NSArray *)ids margin:(CGFloat)margin {
+    
     GiViewHelper *hlp = [[GiViewHelper alloc]init];
-    GiPaintView *tmpview = [hlp createDummyView:size];
+    
+    CGRect rect = [self displayExtent];
+    rect = CGRectInset(rect, -margin, -margin);
+    
+    
+    GiPaintView *tmpview = [hlp createDummyView:rect.size];
+    
+    [hlp setOptions:[self options]];
+    [hlp setImagePath:[self getImagePath]];
+    
     MgShapes *srcs = self.cmdView->shapes();
     MgShapes *dests = hlp.cmdView->shapes();
     
@@ -611,25 +626,112 @@ static GiViewHelper *_sharedInstance = nil;
             }
         }
     }
-    [hlp zoomToExtent];
+    //[hlp zoomToExtent:margin];
     
     UIImage *image = [hlp snapshot];
     [tmpview removeFromSuperview];
     return image;
 }
 
-- (BOOL)exportExtentAsPNG:(NSString *)filename space:(CGFloat)space {
-    UIImage *image = [self extentSnapshot:space];
-    BOOL ret = [UIImagePNGRepresentation(image) writeToFile:filename atomically:NO];
-    if (ret) {
-        NSLog(@"exportExtentAsPNG: %@, %d, %.0fx%.0f@%.0fx",
-              filename, ret, image.size.width, image.size.height, image.scale);
+- (GiViewHelper *) cloneViewWithShapes:(NSArray *)ids andSize:(CGSize) size
+{
+    GiViewHelper *hlp = [[GiViewHelper alloc]init];
+    //GiPaintView *tmpview =
+    [hlp createDummyView:size];
+    
+    NSDictionary *opt = [self options];
+    [hlp setOptions: opt];
+    NSString *bgImage = opt[@"backgroundImage"];
+    CGFloat bgWidth = [opt[@"backgroundWidth"] floatValue];
+    CGFloat bgHeight = [opt[@"backgroundHeight"] floatValue];
+    [[hlp view] setBackgroundImage:bgImage width:bgWidth height:bgHeight scale:1.f];
+    [hlp setImagePath:[self getImagePath]];
+    
+    MgShapes *srcs = self.cmdView->shapes();
+    MgShapes *dests = hlp.cmdView->shapes();
+    
+    @synchronized([_view locker]) {
+        if ([ids count] == 0) {
+            dests->copyShapes(srcs, false);
+        } else {
+            for (NSNumber *sid in ids) {
+                const MgShape *sp = srcs->findShape([sid intValue]);
+                if (sp) {
+                    MgShape* newsp = dests->addShape(*sp);
+                    if (newsp) {
+                        newsp->shape()->setFlag(kMgHideContent, false);
+                        if (newsp->context().getLineAlpha() > 0 && newsp->context().getLineAlpha() < 20) {
+                            GiContext ctx(newsp->context());
+                            ctx.setLineAlpha(20);
+                            newsp->setContext(ctx, GiContext::kLineAlpha);
+                        }
+                    }
+                }
+            }
+        }
     }
-    return ret;
+    
+    return hlp;
 }
 
-- (BOOL)exportPNG:(NSString *)filename {
-    return [_view exportPNG:[GiViewHelper addExtension:filename :@".png"]];
+- (UIImage *) exportImage:(CGFloat)margin
+{
+    CGRect rect = [self displayExtent];
+    if (CGRectIsEmpty(rect))
+        return nil;
+
+    GiViewHelper *hlp = [self cloneViewWithShapes:nil andSize:rect.size];
+    [hlp zoomToExtent:0];
+    
+    rect.origin = CGPointMake(0.f, 0.f);
+    rect = CGRectInset(rect, -margin, -margin);
+    
+    UIGraphicsBeginImageContextWithOptions(rect.size, [hlp view].opaque, 0);
+    CGContextTranslateCTM(UIGraphicsGetCurrentContext(), -rect.origin.x, -rect.origin.y);
+    [[hlp view] viewAdapter2]->renderInContext(UIGraphicsGetCurrentContext());
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return image;
+}
+
+- (UIImage *) getSnapshot:(CGSize)size margin:(CGFloat)margin
+{
+    CGRect rect = CGRectMake(0.f, 0.f, size.width, size.height);
+    
+    GiViewHelper *hlp = [self cloneViewWithShapes:nil andSize:rect.size];
+    [hlp zoomToExtent:margin];
+    
+    UIGraphicsBeginImageContextWithOptions(rect.size, [hlp view].opaque, 0);
+    CGContextTranslateCTM(UIGraphicsGetCurrentContext(), -rect.origin.x, -rect.origin.y);
+    [[hlp view] viewAdapter2]->renderInContext(UIGraphicsGetCurrentContext());
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return image;
+}
+
+- (BOOL)exportPDF:(NSString *)fileName margin:(CGFloat)margin
+{
+    CGRect rect = [self displayExtent]; //CGRectMake(0,0,612,792);
+    if ( CGRectIsEmpty(rect) )
+        return NO;
+    
+    GiViewHelper *hlp = [self cloneViewWithShapes:nil andSize:rect.size];
+    [hlp zoomToExtent:margin];
+    
+    rect.origin = CGPointMake(0.f, 0.f);
+    
+    // Create the PDF context using the default page size of A4(612*792)
+    UIGraphicsBeginPDFContextToFile(fileName, CGRectZero, nil);
+    // Mark the beginning of a new page with A4 size
+    //UIGraphicsBeginPDFPage();
+    UIGraphicsBeginPDFPageWithInfo(rect, nil);
+    CGContextTranslateCTM(UIGraphicsGetCurrentContext(), -rect.origin.x, -rect.origin.y);
+    [[hlp view] viewAdapter2]->renderInContext(UIGraphicsGetCurrentContext());
+    UIGraphicsEndPDFContext();
+    
+    return YES;
 }
 
 - (BOOL)exportSVG:(NSString *)filename {
@@ -673,6 +775,10 @@ static GiViewHelper *_sharedInstance = nil;
                           rc.get(2) - rc.get(0), rc.get(3) - rc.get(1));
     }
     return rect;
+}
+
+- (BOOL)zoomToInitial {
+    return [_view coreView]->zoomToInitial();
 }
 
 - (BOOL)zoomToExtent {
@@ -985,97 +1091,3 @@ static GiViewHelper *_sharedInstance = nil;
 
 @end
 
-#pragma mark - GiMessageHelper
-
-//! The UILabel subclass for show message text.
-@interface WDLabel : UILabel
-@end
-
-@implementation WDLabel
-
-- (void)drawRect:(CGRect)rect
-{
-    CGContextRef ctx = UIGraphicsGetCurrentContext();
-    
-    rect = CGRectInset(rect, 8.0f, 8.0f);
-    CGContextSetShadow(ctx, CGSizeMake(0, 2), 4);
-    
-    [[UIColor colorWithWhite:0.0f alpha:0.5f] set];
-    
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:rect cornerRadius:9.0f];
-    [path fill];
-    
-    [[UIColor whiteColor] set];
-    path.lineWidth = 2;
-    [path stroke];
-    
-    [super drawRect:rect];
-}
-
-@end
-
-@implementation GiMessageHelper
-
-- (void)hideMessage {
-    [UIView animateWithDuration:0.2f
-                     animations:^{ _label.alpha = 0.0f; }
-                     completion:^(BOOL finished) {
-                         [self removeLabel];
-                     }];
-}
-
-- (void)removeLabel {
-    if (_timer) {
-        [_timer invalidate];
-        _timer = nil;
-    }
-    if (_label) {
-        [_label removeFromSuperview];
-        _label = nil;
-    }
-}
-
-- (void)showMessage:(NSString *)message inView:(UIView *)view {
-    BOOL created = NO;
-    
-    [self removeLabel];
-    
-    if (!_label) {
-        _label = [[WDLabel alloc] initWithFrame:CGRectInset(CGRectMake(0,0,100,40), -8, -8)];
-        _label.textColor = [UIColor whiteColor];
-        _label.font = [UIFont boldSystemFontOfSize:24.0f];
-        _label.textAlignment = NSTextAlignmentCenter;
-        _label.opaque = NO;
-        _label.backgroundColor = nil;
-        _label.alpha = 0;
-        
-        created = YES;
-    }
-    
-    _label.text = message;
-    [_label sizeToFit];
-    
-    CGRect frame = _label.frame;
-    frame.size.width = MAX(frame.size.width, 80.f);
-    frame = CGRectInset(frame, -20, -15);
-    _label.frame = frame;
-    _label.center = view.center;
-    
-    if (created) {
-        [view addSubview:_label];
-        
-        [UIView animateWithDuration:0.2f animations:^{ _label.alpha = 1; }];
-    }
-    
-    // start message dismissal timer
-    if (_timer) {
-        [_timer invalidate];
-        _timer = nil;
-    }
-    
-    _timer = [NSTimer scheduledTimerWithTimeInterval:0.7 target:self
-                                            selector:@selector(hideMessage)
-                                            userInfo:nil repeats:NO];
-}
-
-@end

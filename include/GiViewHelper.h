@@ -31,6 +31,7 @@ struct MgShapeFactory;
                           parentView:(UIView *)parentView;  //!< 创建放大镜视图(不需要额外释放)，并记到本类
 - (GiPaintView *)createDummyView:(CGSize)size;      //!< 创建不使用交互命令的临时隐藏视图，需要 removeFromSuperview
 - (id)initWithView:(GiPaintView *)view;             //!< 用于构造非单实例对象
+
 + (void)removeSubviews:(UIView *)owner;             //!< 关闭视图，用在拥有者的 removeFromSuperview 中
 
 - (GiPaintView *)view;                              //!< 返回视图对象
@@ -88,15 +89,17 @@ struct MgShapeFactory;
 - (int)unlockedShapeCount;                  //!< 返回未锁定的可见图形的个数
 - (int)visibleShapeCount;                   //!< 返回可见图形的个数
 
-- (UIImage *)snapshot;                      //!< 得到静态图形的快照，自动释放
-- (UIImage *)extentSnapshot:(CGFloat)space; //!< 得到当前显示的静态图形快照，自动去掉周围空白
-- (UIImage *)snapshotWithShapes:(NSArray *)ids size:(CGSize)size;       //!< 在矩形框内绘制指定ID的图形，ids为空则取所有图形
-- (BOOL)exportExtentAsPNG:(NSString *)filename space:(CGFloat)space;    //!< 保存当前显示的静态图形快照
-- (BOOL)exportPNG:(NSString *)filename;     //!< 保存静态图形的快照到PNG文件，自动改后缀名为.png
+- (UIImage *)snapshotWithShapes:(NSArray *)ids margin:(CGFloat)margin;       //!< 在矩形框内绘制指定ID的图形，ids为空则取所有图形
+
 - (BOOL)exportSVG:(NSString *)filename;     //!< 导出静态图形到SVG文件，自动改后缀名为.svg
 - (int)importSVGPath:(int)sid d:(NSString *)d;  //!< 用SVG路径的d坐标序列创建或设置图形形状
 - (NSString *)exportSVGPath:(int)sid;       //!< 输出SVG路径的d坐标序列
 
+- (UIImage *) getSnapshot:(CGSize)size margin:(CGFloat)margin;
+- (UIImage *) exportImage:(CGFloat)margin;
+- (BOOL)exportPDF:(NSString *)fileName margin:(CGFloat)margin;
+
+- (BOOL)zoomToInitial;
 - (BOOL)zoomToExtent;                       //!< 放缩显示全部内容
 - (BOOL)zoomToExtent:(CGFloat)margin;       //!< 全部内容放缩显示到视图内缩后的区域
 - (BOOL)zoomToModel:(CGRect)rect;           //!< 放缩显示指定范围到视图区域

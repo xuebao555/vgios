@@ -2,7 +2,7 @@
 //! \brief 实现iOS绘图视图适配器 GiViewAdapter
 // Copyright (c) 2012-2015, https://github.com/rhcad/vgios, BSD License
 
-#import "GiViewImpl.h"
+#import "GiViewAdapter.h"
 #import "GiImageCache.h"
 #include "giplaying.h"
 #include "mgshapetype.h"
@@ -49,6 +49,8 @@ GiViewAdapter::GiViewAdapter(GiPaintView *mainView, GiViewAdapter *refView, int 
     : _view(mainView), _dynview(nil), _buttons(nil), _buttonImages(nil), _flags(flags)
     , _actionEnabled(true), _oldAppendCount(0), _regenCount(0), _render(nil)
 {
+    GiCoreView::setScreenDpi(giGetScreenDpi());
+    
     if (refView) {
         _core = GiCoreView::createMagnifierView(this, refView->coreView(), refView);
         _lock = [refView->_lock RETAIN];
@@ -526,11 +528,12 @@ bool GiViewAdapter::twoFingersMove(UIGestureRecognizer *sender, int state, bool 
 }
 
 void GiViewAdapter::hideContextActions() {
-    if (_buttons) {
+    if (_buttons && [_buttons count] > 0) {
         for (UIView *button in _buttons) {
             [button removeFromSuperview];
         }
         [_buttons removeAllObjects];
+        
     }
 }
 
@@ -542,7 +545,6 @@ bool GiViewAdapter::showContextActions(const mgvector<int>& actions,
                                        const mgvector<float>& buttonXY,
                                        float x, float y, float w, float h) {
     int n = actions.count();
-    UIView *btnParent = _view;
     
     if (n == 0 || !_actionEnabled) {
         hideContextActions();
@@ -556,7 +558,8 @@ bool GiViewAdapter::showContextActions(const mgvector<int>& actions,
         return false;
     }
     [NSObject cancelPreviousPerformRequestsWithTarget:_view
-                                             selector:@selector(hideContextActions) object:nil];
+                                             selector:@selector(hideContextActions)
+                                               object:nil];
     hideContextActions();
     
     for (int i = 0; i < n; i++) {
@@ -585,12 +588,18 @@ bool GiViewAdapter::showContextActions(const mgvector<int>& actions,
         btn.center = CGPointMake(buttonXY.get(2 * i), buttonXY.get(2 * i + 1));
         
         [btn addTarget:_view action:@selector(onContextAction:) forControlEvents:UIControlEventTouchUpInside];
-        btn.frame = [btnParent convertRect:btn.frame fromView:_view];
-        [btnParent addSubview:btn];
+        btn.frame = [_view convertRect:btn.frame fromView:_view];
+        //[_view addSubview:btn];
         [_buttons addObject:btn];
         [btn RELEASEOBJ];
     }
+    
     [_view performSelector:@selector(onContextActionsDisplay:) withObject:_buttons];
+    
+    for (UIView *btn in _buttons)
+    {
+        [_view addSubview:btn];
+    }
     
     return [_buttons count] > 0;
 }
@@ -623,6 +632,40 @@ void GiViewAdapter::setContextButton(UIButton *btn, NSString *caption, NSString 
         [btn setTitleColor:[UIColor blackColor] forState: UIControlStateHighlighted];
         btn.backgroundColor = [UIColor colorWithRed:0.5 green:0.5 blue:0.5 alpha:0.8];
         btn.frame = CGRectMake(0, 0, 60, 36);
+    }
+}
+
+void GiViewAdapter::addDelegate(id<GiPaintViewDelegate> d)
+{
+    if (d) {
+        removeDelegate(d);
+        delegates.push_back(d);
+        
+        respondsTo.didCommandChanged |= [d respondsToSelector:@selector(onCommandChanged:)];
+        respondsTo.didSelectionChanged |= [d respondsToSelector:@selector(onSelectionChanged:)];
+        respondsTo.didContentChanged |= [d respondsToSelector:@selector(onContentChanged:)];
+        respondsTo.didDynamicChanged |= [d respondsToSelector:@selector(onDynamicChanged:)];
+        respondsTo.didZoomChanged |= [d respondsToSelector:@selector(onZoomChanged:)];
+        respondsTo.didDynDrawEnded |= [d respondsToSelector:@selector(onDynDrawEnded:)];
+        respondsTo.didShapesRecorded |= [d respondsToSelector:@selector(onShapesRecorded:)];
+        respondsTo.didShapeWillDelete |= [d respondsToSelector:@selector(onShapeWillDelete:)];
+        respondsTo.didShapeDeleted |= [d respondsToSelector:@selector(onShapeDeleted:)];
+        respondsTo.didShapeDblClick |= [d respondsToSelector:@selector(onShapeDblClick:)];
+        respondsTo.didShapeClicked |= [d respondsToSelector:@selector(onShapeClicked:)];
+        respondsTo.didGestureShouldBegin |= [d respondsToSelector:@selector(onGestureShouldBegin:)];
+        respondsTo.didGestureBegan |= [d respondsToSelector:@selector(onGestureBegan:)];
+        respondsTo.didGestureEnded |= [d respondsToSelector:@selector(onGestureEnded:)];
+        
+    }
+}
+
+void GiViewAdapter::removeDelegate(id<GiPaintViewDelegate> d)
+{
+    for (size_t i = 0; i < delegates.size(); i++) {
+        if (delegates[i] == d) {
+            delegates.erase(delegates.begin() + i);
+            break;
+        }
     }
 }
 
@@ -770,6 +813,7 @@ bool GiViewAdapter::shapeClicked(int type, int sid, int tag, float x, float y)
     return false;
 }
 
+
 void GiViewAdapter::onFirstRegen()
 {
     if (_flags & GIViewFlagsZoomExtent) {
@@ -819,17 +863,14 @@ void GiViewAdapter::onShapesRecorded(NSDictionary *info)
 
 void GiViewAdapter::showMessage(const char* text)
 {
-    if (!text) {
+    if (!text)
+    {
         return;
     }
     
-    NSString *str;
-    if (*text == '@') {
-        str = GiLocalizedString(@(text+1));
-    } else {
-        str = @(text);
-    }
-    if (str) {
+    NSString *str = (*text == '@') ? GiLocalizedString(@(text+1)) : @(text) ;
+    if (str)
+    {
         [_messageHelper showMessage:str inView:getDynView(true)];
     }
 }
@@ -838,26 +879,4 @@ void GiViewAdapter::getLocalizedString(const char* name, MgStringCallback* resul
 {
     NSString *text = GiLocalizedString(@(name));
     result->onGetString([text UTF8String]);
-}
-
-#include <mach/mach_time.h>
-
-static int machToMs(uint64_t start)
-{
-    uint64_t elapsedTime = mach_absolute_time() - start;
-    static double ticksToNanoseconds = -1.0;
-    
-    if (ticksToNanoseconds < 0) {
-        mach_timebase_info_data_t timebase;
-        mach_timebase_info(&timebase);
-        ticksToNanoseconds = (double)timebase.numer / timebase.denom * 1e-6;
-    }
-    
-    return (int)(elapsedTime * ticksToNanoseconds);
-}
-
-int getTickCount()
-{
-    static uint64_t start = mach_absolute_time();
-    return machToMs(start);
 }

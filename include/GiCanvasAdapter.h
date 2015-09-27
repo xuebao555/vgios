@@ -10,7 +10,6 @@
 
 @class GiImageCache;
 
-int giGetScreenDpi();
 
 //! 使用 Quartz 2D 实现的画布适配器类
 /*! \ingroup GROUP_IOS
@@ -54,6 +53,9 @@ public:
     bool drawHandle(float x, float y, int type, float angle);
     bool drawBitmap(const char* name, float xc, float yc, float w, float h, float angle);
     float drawTextAt(const char* text, float x, float y, float h, int align, float angle);
+    
+    // 2015-09-11 added
+    virtual float calcTextWidth(const char* text, float h);
     
 private:
     CGContextRef    _ctx;
