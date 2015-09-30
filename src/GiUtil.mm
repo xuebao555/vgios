@@ -103,13 +103,16 @@ NSString *GiLocalizedString(NSString *name)
     
     NSString *str = name;
     NSString *names[] = { @"TouchVG", @"vg1", @"vg2", @"vg3", @"vg4" };
-    NSString *language = [[[NSUserDefaults standardUserDefaults]
-                           objectForKey:@"AppleLanguages"] objectAtIndex:0];
+    NSString *language = [[[NSUserDefaults standardUserDefaults] objectForKey:@"AppleLanguages"] objectAtIndex:0];
+    // fix getting language identifier with region suffix from iOS 9.0
+    language = [[[NSBundle mainBundle] preferredLocalizations] objectAtIndex:0];
     
     for (int i = 0; i < 5 && [str isEqualToString:name]; i++) {
         NSString *path = [[NSBundle mainBundle] pathForResource:names[i] ofType:@"bundle"];
         NSBundle *bundle = [NSBundle bundleWithPath:path];
+        
         NSBundle *languageBundle = [NSBundle bundleWithPath:[bundle pathForResource:language ofType:@"lproj"]];
+        
         str = NSLocalizedStringFromTableInBundle(name, nil, languageBundle, nil);
         str = str ? str : name;
     }

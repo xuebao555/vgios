@@ -53,6 +53,7 @@
     [self.viewToMagnify.superview addSubview:self];
     NSAssert(self.window, @"Fail to add magnifier view");
     self.center = [self calcCenter];
+    [self setNeedsDisplay];
 }
 
 - (void)hide {
