@@ -114,6 +114,8 @@ class GiViewAdapter;
 - (void) setShapeInfo:(NSString *)key withValue:(NSString *)value;
 - (NSString *) getShapeInfo:(NSString *)key;
 
+- (void) showMessage:(NSString* )msg;
+
 @end
 
 /*! \category GiPaintView(GestureRecognizer)

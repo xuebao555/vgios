@@ -7,6 +7,7 @@
 #include "giplaying.h"
 #include "mgshapetype.h"
 #include <algorithm>
+#import "GiMessageHelper.h"
 
 // MgContextAction
 static NSString* const CAPTIONS[] = { nil, @"全选", @"重选", @"绘图", @"取消",
@@ -62,8 +63,7 @@ GiViewAdapter::GiViewAdapter(GiPaintView *mainView, GiViewAdapter *refView, int 
     memset(&respondsTo, 0, sizeof(respondsTo));
     memset(&_queues, 0, sizeof(_queues));
     _imageCache = [[GiImageCache alloc]init];
-    _messageHelper = [[GiMessageHelper alloc]init];
-    
+
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad
         && !(_flags & GIViewFlagsNoBackLayer)) {
         _render = [[GiLayerRender alloc]initWithAdapter:this];
@@ -77,7 +77,6 @@ GiViewAdapter::~GiViewAdapter() {
     [_buttons RELEASEOBJ];
     [_buttonImages RELEASEOBJ];
     [_imageCache RELEASEOBJ];
-    [_messageHelper RELEASEOBJ];
     [_render RELEASEOBJ];
     [_dynview RELEASEOBJ];
     [_lock RELEASEOBJ];
@@ -871,7 +870,7 @@ void GiViewAdapter::showMessage(const char* text)
     NSString *str = (*text == '@') ? GiLocalizedString(@(text+1)) : @(text) ;
     if (str)
     {
-        [_messageHelper showMessage:str inView:getDynView(true)];
+        [_view showMessage:str];
     }
 }
 

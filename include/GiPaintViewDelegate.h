@@ -30,4 +30,7 @@
 - (void)onGestureBegan:(UIGestureRecognizer *)g;    //!< 手势开始的通知
 - (void)onGestureEnded:(UIGestureRecognizer *)g;    //!< 手势结束的通知
 
+// added by kyg on 2015-10-18
+- (void)onEmptyClick:(id)view;
+
 @end

@@ -4,7 +4,6 @@
 
 #import <QuartzCore/QuartzCore.h>
 
-#import "GiMessageHelper.h"
 #import "GiPaintView.h"
 #import "GiViewEnums.h"
 #include "GiCanvasAdapter.h"
@@ -25,7 +24,6 @@ private:
     NSMutableArray  *_buttons;          //!< 上下文按钮的数组
     NSMutableDictionary *_buttonImages; //!< 按钮图像缓存
     GiImageCache    *_imageCache;       //!< 图像对象缓存
-    GiMessageHelper *_messageHelper;    //!< 提示文字辅助对象
     int             _flags;             //!< 视图创建标志，由 GIViewFlags 组成
     bool            _actionEnabled;     //!< 是否允许上下文操作
     long            _appendIDs[20];     //!< 还未来得及重构显示的新增图形的ID、playh

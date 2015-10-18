@@ -5,6 +5,7 @@
 #import "GiViewAdapter.h"
 #import "GiImageCache.h"
 #import "GiMagnifierView.h"
+#import "GiMessageHelper.h"
 #include <map>
 
 
@@ -695,6 +696,13 @@ static std::map<int, dispatch_block_t> _extActions;
         return @"";
 }
 
+- (void) showMessage:(NSString* )msg
+{
+    GiMessageHelper *_messageHelper;    //!< 提示文字辅助对象
+    _messageHelper = [[GiMessageHelper alloc] init];
+    [_messageHelper showMessage:msg inView: _adapter->getDynView(true)];
+}
+
 @end
 
 #pragma mark - GestureRecognizer
@@ -869,6 +877,20 @@ static std::map<int, dispatch_block_t> _extActions;
     }
 }
 
+- (void)onEmptyClick_ {
+    
+    size_t n = _adapter->delegates.size();
+    
+    for (size_t i = 0; i < n; i++) {
+        if ([_adapter->delegates[i] respondsToSelector:@selector(onEmptyClick:)]) {
+            [_adapter->delegates[i] onEmptyClick:self];
+        }
+    }
+    if ([self respondsToSelector:@selector(onEmptyClick:)]) {
+        [self performSelector:@selector(onEmptyClick:) withObject:self];
+    }
+}
+
 - (BOOL)gestureCheck:(UIGestureRecognizer*)sender
 {
     _gestureRecognized = (sender.state == UIGestureRecognizerStateBegan
@@ -1018,6 +1040,10 @@ static std::map<int, dispatch_block_t> _extActions;
     if (_tapCount == 1) {
         _adapter->dispatchGesture(kGiGestureTap, kGiGestureEnded, _tapPoint);
         _tapCount = 0;
+        if ( _adapter->coreView()->getSelectedShapeCount() == 0 )
+        {
+            [self onEmptyClick_];
+        }
     }
 }
 
